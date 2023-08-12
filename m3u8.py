@@ -136,7 +136,10 @@ def merge_video(outfolder, name, all_ts_list, adlist):
     print(end='')
 
     outputname = outfolder + "/../" + name + '.mp4'
-    os.remove(outputname)
+    try:
+        os.remove(outputname)
+    except Exception as e:
+        pass
     (
         ffmpeg
         .input('concat:' + '|'.join(mergelist))
