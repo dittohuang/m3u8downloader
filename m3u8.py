@@ -12,8 +12,17 @@ import cv2
 import numpy as np
 from skimage import measure
 
+keep_ts = False
+
 def extractad(video_file):
-    out, _ = ffmpeg.input(video_file, ss=1).output('pipe:', vframes=1, format='image2', vcodec='mjpeg', loglevel='quiet').run(capture_stdout=True)
+    #out, _ = ffmpeg.input(video_file, ss=1).output('pipe:', vframes=1, format='image2', vcodec='mjpeg', loglevel='quiet').run(capture_stdout=True)
+    out, _ = (
+        ffmpeg
+        .input(video_file)
+        .filter('select', 'eq(pict_type,I)')
+        .output('pipe:', vframes=1, format='image2', vcodec='mjpeg', loglevel='quiet')
+        .run(capture_stdout=True)
+    )
     thumbnail_data = np.frombuffer(out, np.uint8)
     thumbnail_image = cv2.imdecode(thumbnail_data, cv2.IMREAD_COLOR)
     thumbnail_image = cv2.resize(thumbnail_image, (240, 135))
@@ -116,19 +125,18 @@ def parse_url(url):
 def merge_video(outfolder, name, all_ts_list, adlist):
     mergelist = []
     i = 1
-    found = False
     for ts in all_ts_list:
         ts_file = outfolder + "/" + ts
         print("Checking ad: ", i, "/", len(all_ts_list), end='\r')
         i = i + 1
         if (checkad(adlist, ts_file) > 0.98):
             print("found ad: ", ts_file)
-            found = True
         else:
             mergelist.append(ts_file)
     print(end='')
 
     outputname = outfolder + "/../" + name + '.mp4'
+    os.remove(outputname)
     (
         ffmpeg
         .input('concat:' + '|'.join(mergelist))
@@ -136,9 +144,10 @@ def merge_video(outfolder, name, all_ts_list, adlist):
         .run()
     )
 
+    global keep_ts
     if os.path.exists(outputname):
         print("Download Finished:", outputname)
-        if found:
+        if not keep_ts:
             delete_folder(outfolder)
 
 #Download m3u8 url to download_root.
@@ -175,8 +184,12 @@ def main():
     parser = argparse.ArgumentParser(description="M3U8 Downloader")
     parser.add_argument('-u', '--url', type=str, help='The m3u8 URL')
     parser.add_argument('-i', '--input-file', type=str, help='The m3u8 URL file list')
-    parser.add_argument('--download-root', default='./download', type=str, help='The m3u8 URL')
+    parser.add_argument('--download-root', default='./download', type=str, help='Download root folder')
+    parser.add_argument('-k', '--keep-ts', default=False, type=bool, help='Keep the org TS files')
     opt = parser.parse_args()
+
+    global keep_ts
+    keep_ts = opt.keep_ts
 
     #Create download root
     create_folder(opt.download_root)
