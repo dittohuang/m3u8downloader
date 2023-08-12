@@ -23,7 +23,9 @@ $ python m3u8.py -u 'http://www.example.com/abcdefg.m3u8'
 ```
 
 默认存储路径和文件名是./download/\<timestamp\>.mp4
+
 如果需要重命名下载后的文件，请把URL改为：\<myvideo\>$http://www.example.com/abcdefg.m3u8
+
 最终的文件名就是myvideo.mp4
 
 # 下载多个链接
