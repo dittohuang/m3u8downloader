@@ -1,0 +1,2 @@
+ffmpeg-python
+scikit-image==0.15.0
