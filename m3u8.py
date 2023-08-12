@@ -141,16 +141,21 @@ def merge_video(outfolder, name, all_ts_list, adlist):
         if found:
             delete_folder(outfolder)
 
+#Download m3u8 url to download_root.
+#The URL can be: <save_name>$https://xxx.example.com/abcdeft.m3u8
+#<save_name> is optional
 def run(raw_url, download_root):
     name, url = parse_url(raw_url)
 
     #Prepare temp folder
     outname = name
     outfolder = download_root + "/" + outname
+    
+    #Clean the existing folder
     delete_folder(outfolder)
     create_folder(outfolder)
 
-    #Prepare ad list
+    #Load the ad list
     adlist = []
     ad_dir = './ad'
     for filename in os.listdir(ad_dir):
@@ -158,10 +163,12 @@ def run(raw_url, download_root):
         if os.path.isfile(file_path):
             adimg = extractad(file_path)
             adlist.append(adimg)
-    print("AD Lists:", len(adlist))
+    print("Loaded ADs:", len(adlist))
 
+    #Download the file
     all_ts_list, status = download(url, outfolder)
     if (status == 0):
+        #Check ADs and merge the TS files
         merge_video(outfolder, name, all_ts_list, adlist)
 
 def main():
@@ -171,14 +178,18 @@ def main():
     parser.add_argument('--download-root', default='./download', type=str, help='The m3u8 URL')
     opt = parser.parse_args()
 
+    #Create download root
     create_folder(opt.download_root)
 
+    #read m3u8 url from file or command line
     if (opt.input_file is not None):
         with open(opt.input_file, 'r') as file:
             for line in file:
                 run(line.strip('\n'), opt.download_root)
     elif(opt.url is not None):
         run(opt.url, opt.download_root)
+    else:
+        print("Nothing to download")
 
 if __name__ == '__main__':
     main()
