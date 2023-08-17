@@ -25,6 +25,7 @@ def extractad(video_file):
     )
     thumbnail_data = np.frombuffer(out, np.uint8)
     thumbnail_image = cv2.imdecode(thumbnail_data, cv2.IMREAD_COLOR)
+    #cv2.imwrite(video_file + ".jpg", thumbnail_image)
     thumbnail_image = cv2.resize(thumbnail_image, (240, 135))
     return thumbnail_image
 
@@ -131,6 +132,7 @@ def merge_video(outfolder, name, all_ts_list, adlist):
         i = i + 1
         if (checkad(adlist, ts_file) > 0.98):
             print("found ad: ", ts_file)
+            os.remove(ts_file)
         else:
             mergelist.append(ts_file)
     print(end='')
@@ -187,7 +189,7 @@ def main():
     parser = argparse.ArgumentParser(description="M3U8 Downloader")
     parser.add_argument('-u', '--url', type=str, help='The m3u8 URL')
     parser.add_argument('-i', '--input-file', type=str, help='The m3u8 URL file list')
-    parser.add_argument('--download-root', default='./download', type=str, help='Download root folder')
+    parser.add_argument('--download-root', default='./movie', type=str, help='Download root folder')
     parser.add_argument('-k', '--keep-ts', default=False, type=bool, help='Keep the org TS files')
     opt = parser.parse_args()
 
