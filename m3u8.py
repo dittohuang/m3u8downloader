@@ -99,6 +99,9 @@ def download(url, outfolder):
     all_ts_files = []
     status = -1
 
+    if len(url) == 0:
+        return all_ts_files, status
+
     urls_prefix = ''
     last_slash_index = url.rfind('/')
     if last_slash_index != -1:
