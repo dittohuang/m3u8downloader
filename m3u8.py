@@ -98,12 +98,33 @@ def download_video(video_urls, outfolder):
 def download(url, outfolder):
     all_ts_files = []
     status = -1
+
+    urls_prefix = ''
+    last_slash_index = url.rfind('/')
+    if last_slash_index != -1:
+        urls_prefix = url[:last_slash_index]
+    else:
+        print(f"URL error: {url}")
+        return all_ts_files, status
+
     try:
         response = requests.get(url)
         if response.status_code == 200:
             lines = response.text.split('\n')
-            video_urls = [line.strip() for line in lines if line.startswith('http')]
-            all_ts_files, status = download_video(video_urls, outfolder)
+            if len(lines) > 20:
+                video_urls = [line.strip() for line in lines if line.startswith('http')]
+                if len(video_urls) == 0:
+                    short_video_urls = [line.strip() for line in lines if line.endswith('ts')]
+                    for u in short_video_urls:
+                        video_urls.append(urls_prefix + '/' + u)
+                return download_video(video_urls, outfolder)
+            else:
+                m3u8_urls = [line.strip() for line in lines if line.endswith('m3u8')]
+                for m3u8 in m3u8_urls:
+                    full_m3u8_urls = urls_prefix + '/' + m3u8
+                    tss, status = download(full_m3u8_urls, outfolder)
+                    all_ts_files.extend(tss)
+                return all_ts_files, status
         else:
             print(f"Download error, HTTP ErrCode: {response.status_code}")
     except Exception as e:
