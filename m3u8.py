@@ -168,12 +168,27 @@ def merge_video(outfolder, name, all_ts_list, adlist):
         os.remove(outputname)
     except Exception as e:
         pass
-    (
-        ffmpeg
-        .input('concat:' + '|'.join(mergelist))
-        .output(outputname, c='copy', loglevel='quiet')
-        .run()
-    )
+
+    input_list_file = outfolder + "/merge.txt"
+    with open(input_list_file, 'w') as file:
+        for item in mergelist:
+            file.write('file \'' + str(item.split('/')[-1]) + '\'\n')
+        file.close()
+
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", input_list_file,
+        "-c", "copy",
+        outputname
+    ]
+
+    try:
+        subprocess.run(ffmpeg_cmd, check=True)
+        print("Concatenation successful")
+    except subprocess.CalledProcessError as e:
+        print("Error during concatenation:", e)
 
     global keep_ts
     if os.path.exists(outputname):
