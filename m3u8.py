@@ -10,9 +10,13 @@ import re
 import ffmpeg
 import cv2
 import numpy as np
-from skimage import measure
+import skimage
+from pkg_resources import parse_version
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
 
 keep_ts = False
+adlist = []
 
 def extractad(video_file):
     #out, _ = ffmpeg.input(video_file, ss=1).output('pipe:', vframes=1, format='image2', vcodec='mjpeg', loglevel='quiet').run(capture_stdout=True)
@@ -41,10 +45,11 @@ def checkad(adlist, video_file):
     thumbnail_image = cv2.imdecode(thumbnail_data, cv2.IMREAD_COLOR)
     thumbnail_image = cv2.resize(thumbnail_image, (240, 135))
     max_ssim_score = 0
+    use_new_ssim = parse_version(skimage.__version__) >= parse_version("0.16.2")
     for ad in adlist:
         gray1 = cv2.cvtColor(ad, cv2.COLOR_BGR2GRAY)
         gray2 = cv2.cvtColor(thumbnail_image, cv2.COLOR_BGR2GRAY)
-        ssim_score = measure.compare_ssim(gray1, gray2)
+        ssim_score = skimage.metrics.structural_similarity(gray1, gray2) if use_new_ssim else skimage.measure.compare_ssim(gray1, gray2)
         if (ssim_score > max_ssim_score):
             max_ssim_score = ssim_score
     return max_ssim_score
@@ -249,10 +254,89 @@ def merge(merge_folder, download_root):
 
     return
 
+def get_m3u8_playlist(m3u8_file):
+    ts_files = []
+    base_path = os.path.dirname(m3u8_file)
+    with open(m3u8_file, 'r') as file:
+        lines = file.readlines()
+        for line in lines:
+            line = line.strip()
+            if line.startswith('#'):
+                continue
+            if line.endswith('.ts'):
+                ts_path = os.path.join(base_path, line)
+                if os.path.exists(ts_path): 
+                    ts_files.append(ts_path)
+            if line.endswith('.m3u8'):
+                m3u8_path = os.path.join(base_path, line)
+                if os.path.exists(m3u8_path): 
+                    ts_files += get_m3u8_playlist(m3u8_path)
+
+    return ts_files
+
+def filter_ad(ts_file):
+    global adlist
+    if not os.path.exists(ts_file):
+        return None
+    if checkad(adlist, ts_file) > 0.98:
+        os.remove(ts_file)
+        return ts_file
+    else:
+        return None
+
+def merge_m3u8(merge_m3u8_file, out_root):
+    #Load the ad list
+    global adlist
+    adlist = load_ad_list()
+
+    out_filename, source = parse_url(merge_m3u8_file)
+    out_filename += ".mp4"
+    if not os.path.exists(source) or not source.endswith('.m3u8'):
+        print("Invalid m3u8 file:", merge_m3u8_file)
+        return
+    all_ts_files = get_m3u8_playlist(source)
+    if len(all_ts_files) < 0:
+        print("No video resource found")
+        return
+    
+    mergelist = []
+
+    with ThreadPoolExecutor() as executor:
+        results = list(tqdm(executor.map(filter_ad, all_ts_files), total=len(all_ts_files)))
+
+    for result in results:
+        if result is not None:
+            mergelist.append(result)
+
+    out_path = out_root + "/" + out_filename
+    try:
+        os.remove(out_path)
+    except Exception as e:
+        pass
+
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-i", source,
+        "-c", "copy",
+        "-bsf:a", "aac_adtstoasc",
+        "-f", "mp4",
+        out_path
+    ]
+
+    try:
+        subprocess.run(ffmpeg_cmd, check=True)
+        print("Merge successful")
+    except subprocess.CalledProcessError as e:
+        print("Error during merging:", e)
+
+    return
+
 def main():
     parser = argparse.ArgumentParser(description="M3U8 Downloader")
-    parser.add_argument('-u', '--url', type=str, help='The m3u8 URL')
-    parser.add_argument('-i', '--input-file', type=str, help='The m3u8 URL file list')
+    mutex_group = parser.add_mutually_exclusive_group(required=True)
+    mutex_group.add_argument('-u', '--url', type=str, help='The m3u8 URL')
+    mutex_group.add_argument('-i', '--input-file', type=str, help='The m3u8 URL file list')
+    mutex_group.add_argument('-s', '--local-source', type=str, help='local m3u8 file location')
     parser.add_argument('-m', '--merge', type=str, help='The folder to be merge. only merge the TS files listed in the urls.txt')
     parser.add_argument('--download-root', default='./movie', type=str, help='Download root folder')
     parser.add_argument('-k', '--keep-ts', default=False, type=bool, help='Keep the org TS files')
@@ -267,10 +351,16 @@ def main():
     #read m3u8 url from file or command line
     if opt.input_file is not None:
         with open(opt.input_file, 'r') as file:
-            for line in file:
-                run(line.strip('\n'), opt.download_root)
+            for line_ in file:
+                line = line_.strip('\n').strip()
+                if line.count('//') == 0 and os.path.exists(line):
+                    merge_m3u8(line, opt.download_root)
+                else:
+                    run(line, opt.download_root)
     elif opt.url is not None:
         run(opt.url, opt.download_root)
+    elif opt.local_source is not None:
+        merge_m3u8(opt.local_source, opt.download_root)
     elif opt.merge is not None:
         merge(opt.merge, opt.download_root)
     else:
