@@ -1,2 +1,3 @@
 ffmpeg-python
-scikit-image==0.15.0
+scikit-image>=0.15.0
+tqdm
